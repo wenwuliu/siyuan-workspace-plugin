@@ -9,13 +9,13 @@
 
     export let app: any;
     export let workspaceManager: WorkspaceManagerService;
+    export let onDataChange: () => void;
 
     const dispatch = createEventDispatcher();
 
     let workspaces: Workspace[] = [];
     let currentWorkspace: Workspace | undefined;
     let showCreateDialog = false;
-    let showSwitchDialog = false;
     let createData: CreateWorkspaceData = { name: '', description: '' };
 
     onMount(() => {
@@ -23,8 +23,20 @@
     });
 
     function loadWorkspaces() {
-        workspaces = workspaceManager.getWorkspaces();
-        currentWorkspace = workspaceManager.getCurrentWorkspace();
+        try {
+            if (workspaceManager) {
+                workspaces = workspaceManager.getWorkspaces() || [];
+                currentWorkspace = workspaceManager.getCurrentWorkspace();
+            } else {
+                console.warn('工作区管理器未初始化');
+                workspaces = [];
+                currentWorkspace = undefined;
+            }
+        } catch (error) {
+            console.error('加载工作区失败:', error);
+            workspaces = [];
+            currentWorkspace = undefined;
+        }
     }
 
     function openCreateDialog() {
@@ -32,16 +44,9 @@
         showCreateDialog = true;
     }
 
-    function openSwitchDialog() {
-        showSwitchDialog = true;
-    }
-
     function closeCreateDialog() {
         showCreateDialog = false;
-    }
-
-    function closeSwitchDialog() {
-        showSwitchDialog = false;
+        createData = { name: '', description: '' };
     }
 
     async function createWorkspace() {
@@ -56,6 +61,10 @@
             showMessage(`工作区 "${workspace.name}" 已创建`);
             closeCreateDialog();
             dispatch('workspace-created', workspace);
+            // 通知主插件保存数据
+            if (onDataChange) {
+                onDataChange();
+            }
         } catch (error) {
             showMessage('创建工作区失败: ' + error.message);
         }
@@ -66,8 +75,11 @@
             await workspaceManager.switchToWorkspace(workspace.id);
             loadWorkspaces();
             showMessage(`已切换到工作区 "${workspace.name}"`);
-            closeSwitchDialog();
             dispatch('workspace-switched', workspace);
+            // 通知主插件保存数据
+            if (onDataChange) {
+                onDataChange();
+            }
         } catch (error) {
             showMessage('切换工作区失败: ' + error.message);
         }
@@ -80,6 +92,10 @@
                 loadWorkspaces();
                 showMessage(`工作区 "${workspace.name}" 已删除`);
                 dispatch('workspace-deleted', workspace);
+                // 通知主插件保存数据
+                if (onDataChange) {
+                    onDataChange();
+                }
             } catch (error) {
                 showMessage('删除工作区失败: ' + error.message);
             }
@@ -97,6 +113,10 @@
             loadWorkspaces();
             showMessage('当前工作区已保存');
             dispatch('workspace-saved', currentWorkspace);
+            // 通知主插件保存数据
+            if (onDataChange) {
+                onDataChange();
+            }
         } catch (error) {
             showMessage('保存工作区失败: ' + error.message);
         }
@@ -107,13 +127,9 @@
     <div class="workspace-header">
         <h3>工作区管理</h3>
         <div class="workspace-actions">
-            <button class="b3-button b3-button--text" on:click={openCreateDialog}>
+            <button class="b3-button b3-button--primary" on:click={openCreateDialog}>
                 <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                 新建工作区
-            </button>
-            <button class="b3-button b3-button--text" on:click={openSwitchDialog}>
-                <svg class="b3-button__icon"><use xlink:href="#iconSwitch"></use></svg>
-                切换工作区
             </button>
         </div>
     </div>
@@ -182,80 +198,63 @@
 <!-- 创建工作区对话框 -->
 {#if showCreateDialog}
     <div class="b3-dialog__mask" on:click={closeCreateDialog}>
-        <div class="b3-dialog" on:click|stopPropagation>
+        <div class="b3-dialog workspace-create-dialog" on:click|stopPropagation>
             <div class="b3-dialog__header">
-                <h3>新建工作区</h3>
-                <button class="b3-button b3-button--text" on:click={closeCreateDialog}>
+                <div class="b3-dialog__header-title">
+                    <svg class="b3-dialog__header-icon"><use xlink:href="#iconAdd"></use></svg>
+                    <h3>新建工作区</h3>
+                </div>
+                <button class="b3-button b3-button--text b3-button--small" on:click={closeCreateDialog}>
                     <svg class="b3-button__icon"><use xlink:href="#iconClose"></use></svg>
                 </button>
             </div>
             <div class="b3-dialog__body">
-                <div class="b3-form__item">
-                    <label class="b3-form__label">工作区名称</label>
-                    <input 
-                        class="b3-text-field" 
-                        type="text" 
-                        bind:value={createData.name}
-                        placeholder="请输入工作区名称"
-                    />
-                </div>
-                <div class="b3-form__item">
-                    <label class="b3-form__label">工作区描述</label>
-                    <textarea 
-                        class="b3-text-field" 
-                        bind:value={createData.description}
-                        placeholder="请输入工作区描述（可选）"
-                        rows="3"
-                    ></textarea>
+                <div class="workspace-create-form">
+                    <div class="b3-form__item">
+                        <label class="b3-form__label" for="workspace-name">工作区名称 *</label>
+                        <input 
+                            id="workspace-name"
+                            class="b3-text-field b3-text-field--full" 
+                            type="text" 
+                            bind:value={createData.name}
+                            placeholder="请输入工作区名称"
+                            maxlength="50"
+                        />
+                        <div class="b3-form__help">为工作区起一个有意义的名字</div>
+                    </div>
+                    <div class="b3-form__item">
+                        <label class="b3-form__label" for="workspace-description">工作区描述</label>
+                        <textarea 
+                            id="workspace-description"
+                            class="b3-text-field b3-text-field--full" 
+                            bind:value={createData.description}
+                            placeholder="描述这个工作区的用途（可选）"
+                            rows="3"
+                            maxlength="200"
+                        ></textarea>
+                        <div class="b3-form__help">可选，用于描述工作区的用途</div>
+                    </div>
+                    <div class="workspace-create-info">
+                        <div class="workspace-create-info__icon">
+                            <svg><use xlink:href="#iconInfo"></use></svg>
+                        </div>
+                        <div class="workspace-create-info__text">
+                            <strong>提示：</strong>新建工作区将保存当前打开的所有页签状态，包括文档、搜索、图谱等。
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="b3-dialog__footer">
-                <button class="b3-button" on:click={closeCreateDialog}>取消</button>
-                <button class="b3-button b3-button--primary" on:click={createWorkspace}>创建</button>
+                <button class="b3-button b3-button--text" on:click={closeCreateDialog}>取消</button>
+                <button class="b3-button b3-button--primary" on:click={createWorkspace} disabled={!createData.name.trim()}>
+                    <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
+                    创建工作区
+                </button>
             </div>
         </div>
     </div>
 {/if}
 
-<!-- 切换工作区对话框 -->
-{#if showSwitchDialog}
-    <div class="b3-dialog__mask" on:click={closeSwitchDialog}>
-        <div class="b3-dialog" on:click|stopPropagation>
-            <div class="b3-dialog__header">
-                <h3>切换工作区</h3>
-                <button class="b3-button b3-button--text" on:click={closeSwitchDialog}>
-                    <svg class="b3-button__icon"><use xlink:href="#iconClose"></use></svg>
-                </button>
-            </div>
-            <div class="b3-dialog__body">
-                {#if workspaces.length === 0}
-                    <div class="empty-state">
-                        <p>暂无工作区</p>
-                        <button class="b3-button b3-button--primary" on:click={openCreateDialog}>
-                            创建第一个工作区
-                        </button>
-                    </div>
-                {:else}
-                    <div class="workspace-list">
-                        {#each workspaces as workspace}
-                            <div class="workspace-item" on:click={() => switchToWorkspace(workspace)}>
-                                <div class="workspace-info">
-                                    <div class="workspace-name">{workspace.name}</div>
-                                    {#if workspace.description}
-                                        <div class="workspace-description">{workspace.description}</div>
-                                    {/if}
-                                    <div class="workspace-meta">
-                                        页签数: {workspace.tabs.length}
-                                    </div>
-                                </div>
-                            </div>
-                        {/each}
-                    </div>
-                {/if}
-            </div>
-        </div>
-    </div>
-{/if}
 
 <style>
     .workspace-panel {
@@ -418,5 +417,81 @@
     .b3-text-field:focus {
         outline: none;
         border-color: var(--b3-theme-primary);
+    }
+
+    /* 新建工作区对话框样式 */
+    .workspace-create-dialog {
+        max-width: 500px;
+        width: 90vw;
+    }
+
+    .b3-dialog__header-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .b3-dialog__header-icon {
+        width: 20px;
+        height: 20px;
+        color: var(--b3-theme-primary);
+    }
+
+    .workspace-create-form {
+        padding: 8px 0;
+    }
+
+    .b3-form__help {
+        font-size: 12px;
+        color: var(--b3-theme-on-surface-variant);
+        margin-top: 4px;
+        line-height: 1.4;
+    }
+
+    .b3-text-field--full {
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .workspace-create-info {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px;
+        background-color: var(--b3-theme-surface-variant);
+        border-radius: 6px;
+        margin-top: 16px;
+    }
+
+    .workspace-create-info__icon {
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+
+    .workspace-create-info__icon svg {
+        width: 16px;
+        height: 16px;
+        color: var(--b3-theme-primary);
+    }
+
+    .workspace-create-info__text {
+        flex: 1;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--b3-theme-on-surface);
+    }
+
+    .workspace-create-info__text strong {
+        color: var(--b3-theme-primary);
+    }
+
+    .b3-button--small {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+
+    .b3-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 </style>

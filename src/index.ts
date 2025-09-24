@@ -31,10 +31,75 @@ export default class WorkspacePlugin extends Plugin {
         this.workspaceManager = new WorkspaceManagerService(undefined, this.app);
         
         // 加载工作区数据
-        if (this.data[STORAGE_NAME]) {
-            this.workspaceManager.setData(this.data[STORAGE_NAME]);
-        } else {
-            this.data[STORAGE_NAME] = this.workspaceManager.getData();
+        try {
+            console.log("=== 开始加载工作区数据 ===");
+            console.log("STORAGE_NAME:", STORAGE_NAME);
+            console.log("this.data 初始状态:", this.data);
+            
+            // 先尝试从 this.data 中获取数据
+            let savedData = this.data[STORAGE_NAME];
+            console.log("从 this.data 中获取的数据:", savedData);
+            
+            // 如果 this.data 中没有数据，尝试从持久化存储中加载
+            if (!savedData) {
+                console.log("this.data 中没有数据，尝试从持久化存储加载...");
+                savedData = await this.loadData(STORAGE_NAME);
+                console.log("从持久化存储加载的数据:", savedData);
+                
+                // 检查是否是字符串 "undefined" 或真正的 undefined
+                if (savedData === "undefined" || savedData === undefined || savedData === null) {
+                    console.log("检测到无效数据，设置为 null");
+                    savedData = null;
+                }
+            }
+            
+            if (savedData) {
+                console.log("找到保存的数据，开始验证数据结构...");
+                console.log("savedData 类型:", typeof savedData);
+                console.log("savedData 内容:", JSON.stringify(savedData, null, 2));
+                
+                // 验证数据结构
+                if (savedData.workspaces && Array.isArray(savedData.workspaces)) {
+                    console.log("数据结构验证通过，设置到工作区管理器");
+                    this.workspaceManager.setData(savedData);
+                    console.log("工作区数据已加载:", savedData);
+                } else {
+                    console.warn("加载的数据结构不正确，使用默认数据");
+                    console.warn("savedData.workspaces:", savedData.workspaces);
+                    console.warn("Array.isArray(savedData.workspaces):", Array.isArray(savedData.workspaces));
+                    
+                    // 如果数据结构不正确，使用默认数据
+                    const defaultData = {
+                        workspaces: [],
+                        currentWorkspaceId: undefined
+                    };
+                    this.workspaceManager.setData(defaultData);
+                    // 保存默认数据
+                    await this.saveData(STORAGE_NAME, defaultData);
+                    console.log("已保存默认数据");
+                }
+            } else {
+                console.log("没有找到保存的工作区数据，使用默认数据");
+                // 初始化默认数据
+                const defaultData = {
+                    workspaces: [],
+                    currentWorkspaceId: undefined
+                };
+                this.workspaceManager.setData(defaultData);
+                // 保存默认数据
+                await this.saveData(STORAGE_NAME, defaultData);
+                console.log("已初始化并保存默认数据");
+            }
+            console.log("=== 工作区数据加载完成 ===");
+        } catch (error) {
+            console.error("加载工作区数据失败:", error);
+            // 出错时使用默认数据
+            const defaultData = {
+                workspaces: [],
+                currentWorkspaceId: undefined
+            };
+            this.workspaceManager.setData(defaultData);
+            console.log("出错时使用默认数据");
         }
 
         // 添加dock
@@ -65,7 +130,20 @@ export default class WorkspacePlugin extends Plugin {
                     target: dockDiv,
                     props: {
                         app: this.app,
-                        workspaceManager: this.workspaceManager
+                        workspaceManager: this.workspaceManager,
+                        onDataChange: async () => {
+                            try {
+                                console.log("=== 开始保存工作区数据 ===");
+                                const data = this.workspaceManager.getData();
+                                console.log("要保存的数据:", JSON.stringify(data, null, 2));
+                                
+                                await this.saveData(STORAGE_NAME, data);
+                                console.log("数据已保存到持久化存储");
+                                console.log("=== 工作区数据保存完成 ===");
+                            } catch (error) {
+                                console.error("保存工作区数据失败:", error);
+                            }
+                        }
                     }
                 });
                 
@@ -136,12 +214,21 @@ export default class WorkspacePlugin extends Plugin {
             target: dialog.element.querySelector("#workspace-dialog"),
             props: {
                 app: this.app,
-                workspaceManager: this.workspaceManager
+                workspaceManager: this.workspaceManager,
+                onDataChange: async () => {
+                    try {
+                        const data = this.workspaceManager.getData();
+                        await this.saveData(STORAGE_NAME, data);
+                        console.log("工作区数据已保存:", data);
+                    } catch (error) {
+                        console.error("保存工作区数据失败:", error);
+                    }
+                }
             }
         });
     }
 
-    private createWorkspace() {
+    private async createWorkspace() {
         const name = prompt("请输入工作区名称:");
         if (!name || !name.trim()) return;
 
@@ -154,8 +241,17 @@ export default class WorkspacePlugin extends Plugin {
             });
             
             // 保存数据
-            this.data[STORAGE_NAME] = this.workspaceManager.getData();
-            this.saveData(STORAGE_NAME);
+            try {
+                console.log("=== 创建命令保存工作区数据 ===");
+                const data = this.workspaceManager.getData();
+                console.log("要保存的数据:", JSON.stringify(data, null, 2));
+                
+                await this.saveData(STORAGE_NAME, data);
+                console.log("数据已保存到持久化存储");
+                console.log("=== 创建命令数据保存完成 ===");
+            } catch (error) {
+                console.error("保存工作区数据失败:", error);
+            }
             
             showMessage(`工作区 "${workspace.name}" 已创建`);
         } catch (error) {
@@ -180,8 +276,17 @@ export default class WorkspacePlugin extends Plugin {
                 await this.workspaceManager.switchToWorkspace(workspaces[selectedIndex].id);
                 
                 // 保存数据
-                this.data[STORAGE_NAME] = this.workspaceManager.getData();
-                this.saveData(STORAGE_NAME);
+                try {
+                    console.log("=== 切换命令保存工作区数据 ===");
+                    const data = this.workspaceManager.getData();
+                    console.log("要保存的数据:", JSON.stringify(data, null, 2));
+                    
+                    await this.saveData(STORAGE_NAME, data);
+                    console.log("数据已保存到持久化存储");
+                    console.log("=== 切换命令数据保存完成 ===");
+                } catch (error) {
+                    console.error("保存工作区数据失败:", error);
+                }
                 
                 showMessage(`已切换到工作区 "${workspaces[selectedIndex].name}"`);
             } catch (error) {

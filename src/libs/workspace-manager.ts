@@ -15,20 +15,28 @@ export class WorkspaceManagerService {
       currentWorkspaceId: undefined
     };
     this.app = app;
+    
+    // 确保数据结构正确
+    if (!this.data.workspaces) {
+      this.data.workspaces = [];
+    }
+    if (this.data.currentWorkspaceId === undefined) {
+      this.data.currentWorkspaceId = undefined;
+    }
   }
 
   /**
    * 获取所有工作区
    */
   getWorkspaces(): Workspace[] {
-    return this.data.workspaces;
+    return this.data.workspaces || [];
   }
 
   /**
    * 获取当前工作区
    */
   getCurrentWorkspace(): Workspace | undefined {
-    if (!this.data.currentWorkspaceId) return undefined;
+    if (!this.data.currentWorkspaceId || !this.data.workspaces) return undefined;
     return this.data.workspaces.find(w => w.id === this.data.currentWorkspaceId);
   }
 
@@ -36,6 +44,11 @@ export class WorkspaceManagerService {
    * 创建新工作区
    */
   createWorkspace(data: CreateWorkspaceData): Workspace {
+    // 确保 workspaces 数组存在
+    if (!this.data.workspaces) {
+      this.data.workspaces = [];
+    }
+
     const workspace: Workspace = {
       id: this.generateId(),
       name: data.name,
@@ -68,6 +81,8 @@ export class WorkspaceManagerService {
    * 删除工作区
    */
   deleteWorkspace(id: string): boolean {
+    if (!this.data.workspaces) return false;
+    
     const index = this.data.workspaces.findIndex(w => w.id === id);
     if (index === -1) return false;
 
@@ -85,6 +100,8 @@ export class WorkspaceManagerService {
    * 切换到指定工作区
    */
   async switchToWorkspace(id: string): Promise<boolean> {
+    if (!this.data.workspaces) return false;
+    
     const workspace = this.data.workspaces.find(w => w.id === id);
     if (!workspace) return false;
 
@@ -110,7 +127,7 @@ export class WorkspaceManagerService {
    * 保存当前工作区
    */
   saveCurrentWorkspace(): boolean {
-    if (!this.data.currentWorkspaceId) return false;
+    if (!this.data.currentWorkspaceId || !this.data.workspaces) return false;
 
     const workspace = this.data.workspaces.find(w => w.id === this.data.currentWorkspaceId);
     if (!workspace) return false;
@@ -127,12 +144,22 @@ export class WorkspaceManagerService {
   private getCurrentTabs(): TabState[] {
     const tabs: TabState[] = [];
     
-    // 获取所有编辑器
-    const editors = getAllEditor();
-    
-    // 这里需要根据思源笔记的API来获取当前打开的页签
-    // 由于思源笔记的页签管理比较复杂，这里先返回一个空数组
-    // 后续需要根据实际的API来实现
+    try {
+      // 获取所有编辑器
+      const editors = getAllEditor();
+      
+      // 检查编辑器是否存在
+      if (editors && Array.isArray(editors)) {
+        // 这里需要根据思源笔记的API来获取当前打开的页签
+        // 由于思源笔记的页签管理比较复杂，这里先返回一个空数组
+        // 后续需要根据实际的API来实现
+        console.log('找到编辑器数量:', editors.length);
+      } else {
+        console.log('没有找到编辑器或编辑器不是数组');
+      }
+    } catch (error) {
+      console.error('获取编辑器失败:', error);
+    }
     
     return tabs;
   }
@@ -236,5 +263,15 @@ export class WorkspaceManagerService {
    */
   setData(data: WorkspaceManager): void {
     this.data = data;
+    
+    // 确保数据结构正确
+    if (!this.data.workspaces) {
+      this.data.workspaces = [];
+    }
+    if (this.data.currentWorkspaceId === undefined) {
+      this.data.currentWorkspaceId = undefined;
+    }
+    
+    console.log("工作区数据已设置:", this.data);
   }
 }
