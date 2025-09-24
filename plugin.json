@@ -1,0 +1,46 @@
+{
+  "name": "siyuan-workspace-plugin",
+  "author": "liuwenwu",
+  "url": "https://github.com/liuwenwu/siyuan-workspace-plugin",
+  "version": "1.0.0",
+  "minAppVersion": "3.2.1",
+  "disabledInPublish": false,
+  "backends": [
+    "windows",
+    "linux",
+    "darwin",
+    "ios",
+    "android",
+    "harmony",
+    "docker"
+  ],
+  "frontends": [
+    "desktop",
+    "mobile",
+    "browser-desktop",
+    "browser-mobile",
+    "desktop-window"
+  ],
+  "displayName": {
+    "en_US": "Workspace Manager",
+    "zh_CN": "工作区管理器"
+  },
+  "description": {
+    "en_US": "A workspace management plugin that allows you to save and switch between different tab combinations",
+    "zh_CN": "工作区管理插件，支持保存和切换不同的文档页签组合"
+  },
+  "readme": {
+    "en_US": "README.md",
+    "zh_CN": "README_zh_CN.md"
+  },
+  "funding": {
+    "custom": [
+      ""
+    ]
+  },
+  "keywords": [
+    "plugin",
+    "sample",
+    "插件样例"
+  ]
+}
