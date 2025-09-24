@@ -1,497 +1,710 @@
 <!--
-  工作区管理面板
+  工作区管理面板 - 支持极简模式和完整管理模式
 -->
 <script lang="ts">
-    import { onMount, createEventDispatcher } from 'svelte';
-    import { showMessage, confirm } from 'siyuan';
-    import { WorkspaceManagerService } from './libs/workspace-manager';
-    import { Workspace, CreateWorkspaceData } from '@/types/workspace.d';
+  import { onMount, createEventDispatcher } from 'svelte';
+  import { showMessage, confirm } from 'siyuan';
+  import { WorkspaceManagerService } from './libs/workspace-manager';
+  import { Workspace, CreateWorkspaceData } from '@/types/workspace.d';
+  import WorkspaceDropdown from './workspace-dropdown.svelte';
 
-    export let app: any;
-    export let workspaceManager: WorkspaceManagerService;
-    export let onDataChange: () => void;
+  export let app: any;
+  export let workspaceManager: WorkspaceManagerService;
+  export let onDataChange: () => void;
 
-    const dispatch = createEventDispatcher();
+  const dispatch = createEventDispatcher();
 
-    let workspaces: Workspace[] = [];
-    let currentWorkspace: Workspace | undefined;
-    let showCreateDialog = false;
-    let createData: CreateWorkspaceData = { name: '', description: '' };
+  let workspaces: Workspace[] = [];
+  let currentWorkspace: Workspace | undefined;
+  let showCreateDialog = false;
+  let showDeleteDialog = false;
+  let workspaceToDelete: Workspace | null = null;
+  let createData: CreateWorkspaceData = { name: '', description: '' };
+  let showFullManagement = true;
+  let editingWorkspaceId: string | null = null;
+  let editingName = '';
 
-    onMount(() => {
+  onMount(() => {
+    loadWorkspaces();
+  });
+
+  function loadWorkspaces() {
+    try {
+      if (workspaceManager) {
+        workspaces = workspaceManager.getWorkspaces() || [];
+        currentWorkspace = workspaceManager.getCurrentWorkspace();
+      } else {
+        console.warn('工作区管理器未初始化');
+        workspaces = [];
+        currentWorkspace = undefined;
+      }
+    } catch (error) {
+      console.error('加载工作区失败:', error);
+      workspaces = [];
+      currentWorkspace = undefined;
+    }
+  }
+
+  function openCreateDialog() {
+    createData = { name: '', description: '' };
+    showCreateDialog = true;
+  }
+
+  function closeCreateDialog() {
+    showCreateDialog = false;
+    createData = { name: '', description: '' };
+  }
+
+  async function createWorkspace() {
+    if (!createData.name.trim()) {
+      showMessage('请输入工作区名称');
+      return;
+    }
+
+    try {
+      const workspace = await workspaceManager.createWorkspace(createData);
+      if (workspace) {
         loadWorkspaces();
-    });
+        onDataChange();
+        closeCreateDialog();
+        showMessage(`工作区 "${workspace.name}" 创建成功`);
+      }
+    } catch (error) {
+      console.error('创建工作区失败:', error);
+      showMessage('创建工作区失败');
+    }
+  }
 
-    function loadWorkspaces() {
-        try {
-            if (workspaceManager) {
-                workspaces = workspaceManager.getWorkspaces() || [];
-                currentWorkspace = workspaceManager.getCurrentWorkspace();
-            } else {
-                console.warn('工作区管理器未初始化');
-                workspaces = [];
-                currentWorkspace = undefined;
-            }
-        } catch (error) {
-            console.error('加载工作区失败:', error);
-            workspaces = [];
-            currentWorkspace = undefined;
-        }
+  async function switchWorkspace(workspaceId: string) {
+    if (workspaceId === currentWorkspace?.id) return;
+
+    try {
+      const success = await workspaceManager.switchToWorkspace(workspaceId);
+      if (success) {
+        loadWorkspaces();
+        onDataChange();
+        showMessage(`已切换到工作区 "${workspaces.find(w => w.id === workspaceId)?.name}"`);
+      }
+    } catch (error) {
+      console.error('切换工作区失败:', error);
+      showMessage('切换工作区失败');
+    }
+  }
+
+  function deleteWorkspace(workspace: Workspace) {
+    workspaceToDelete = workspace;
+    showDeleteDialog = true;
+  }
+
+  async function confirmDelete() {
+    if (!workspaceToDelete) return;
+
+    try {
+      const success = workspaceManager.deleteWorkspace(workspaceToDelete.id);
+      if (success) {
+        loadWorkspaces();
+        onDataChange();
+        showDeleteDialog = false;
+        workspaceToDelete = null;
+        showMessage(`工作区 "${workspaceToDelete.name}" 已删除`);
+      }
+    } catch (error) {
+      console.error('删除工作区失败:', error);
+      showMessage('删除工作区失败');
+    }
+  }
+
+  function saveCurrentWorkspace() {
+    const success = workspaceManager.saveCurrentWorkspace();
+    if (success) {
+      onDataChange();
+      showMessage('当前工作区已保存');
+    }
+  }
+
+  function handleOpenSettings() {
+    showFullManagement = true;
+  }
+
+  function handleDataChange(data: any) {
+    loadWorkspaces();
+    onDataChange();
+  }
+
+
+  function startEditWorkspace(workspace: Workspace) {
+    editingWorkspaceId = workspace.id;
+    editingName = workspace.name;
+  }
+
+  function cancelEdit() {
+    editingWorkspaceId = null;
+    editingName = '';
+  }
+
+  async function saveEdit() {
+    if (!editingWorkspaceId || !editingName.trim()) {
+      showMessage('请输入有效的工作区名称');
+      return;
     }
 
-    function openCreateDialog() {
-        createData = { name: '', description: '' };
-        showCreateDialog = true;
+    try {
+      const success = workspaceManager.updateWorkspace({
+        id: editingWorkspaceId,
+        name: editingName.trim()
+      });
+      
+      if (success) {
+        loadWorkspaces();
+        onDataChange();
+        cancelEdit();
+        showMessage('工作区名称已更新');
+      }
+    } catch (error) {
+      console.error('更新工作区名称失败:', error);
+      showMessage('更新工作区名称失败');
     }
+  }
 
-    function closeCreateDialog() {
-        showCreateDialog = false;
-        createData = { name: '', description: '' };
+  function handleEditKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      saveEdit();
+    } else if (event.key === 'Escape') {
+      cancelEdit();
     }
-
-    async function createWorkspace() {
-        if (!createData.name.trim()) {
-            showMessage('请输入工作区名称');
-            return;
-        }
-
-        try {
-            const workspace = workspaceManager.createWorkspace(createData);
-            loadWorkspaces();
-            showMessage(`工作区 "${workspace.name}" 已创建`);
-            closeCreateDialog();
-            dispatch('workspace-created', workspace);
-            // 通知主插件保存数据
-            if (onDataChange) {
-                onDataChange();
-            }
-        } catch (error) {
-            showMessage('创建工作区失败: ' + error.message);
-        }
-    }
-
-    async function switchToWorkspace(workspace: Workspace) {
-        try {
-            await workspaceManager.switchToWorkspace(workspace.id);
-            loadWorkspaces();
-            showMessage(`已切换到工作区 "${workspace.name}"`);
-            dispatch('workspace-switched', workspace);
-            // 通知主插件保存数据
-            if (onDataChange) {
-                onDataChange();
-            }
-        } catch (error) {
-            showMessage('切换工作区失败: ' + error.message);
-        }
-    }
-
-    function deleteWorkspace(workspace: Workspace) {
-        confirm('确认删除', `确认删除工作区 "${workspace.name}" 吗？`, () => {
-            try {
-                workspaceManager.deleteWorkspace(workspace.id);
-                loadWorkspaces();
-                showMessage(`工作区 "${workspace.name}" 已删除`);
-                dispatch('workspace-deleted', workspace);
-                // 通知主插件保存数据
-                if (onDataChange) {
-                    onDataChange();
-                }
-            } catch (error) {
-                showMessage('删除工作区失败: ' + error.message);
-            }
-        });
-    }
-
-    function saveCurrentWorkspace() {
-        if (!currentWorkspace) {
-            showMessage('没有当前工作区');
-            return;
-        }
-
-        try {
-            workspaceManager.saveCurrentWorkspace();
-            loadWorkspaces();
-            showMessage('当前工作区已保存');
-            dispatch('workspace-saved', currentWorkspace);
-            // 通知主插件保存数据
-            if (onDataChange) {
-                onDataChange();
-            }
-        } catch (error) {
-            showMessage('保存工作区失败: ' + error.message);
-        }
-    }
+  }
 </script>
 
 <div class="workspace-panel">
-    <div class="workspace-header">
+  {#if !showFullManagement}
+    <!-- 极简下拉框模式 -->
+    <div class="simple-mode">
+      <WorkspaceDropdown 
+        {app} 
+        {workspaceManager} 
+        onDataChange={handleDataChange}
+        on:openSettings={handleOpenSettings}
+      />
+    </div>
+  {:else}
+    <!-- 完整管理模式 -->
+    <div class="full-management-mode">
+      <div class="header">
         <h3>工作区管理</h3>
-        <div class="workspace-actions">
-            <button class="b3-button b3-button--primary" on:click={openCreateDialog}>
-                <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
-                新建工作区
-            </button>
-        </div>
-    </div>
+      </div>
 
-    <div class="workspace-content">
-        {#if currentWorkspace}
-            <div class="current-workspace">
-                <h4>当前工作区</h4>
-                <div class="workspace-item current">
-                    <div class="workspace-info">
-                        <div class="workspace-name">{currentWorkspace.name}</div>
-                        {#if currentWorkspace.description}
-                            <div class="workspace-description">{currentWorkspace.description}</div>
-                        {/if}
-                        <div class="workspace-meta">
-                            页签数: {currentWorkspace.tabs.length} | 
-                            更新于: {new Date(currentWorkspace.updatedAt).toLocaleString()}
-                        </div>
-                    </div>
-                    <div class="workspace-actions">
-                        <button class="b3-button b3-button--text" on:click={saveCurrentWorkspace}>
-                            保存
-                        </button>
-                    </div>
-                </div>
+      <div class="workspace-list">
+        {#each workspaces as workspace}
+          <div class="workspace-item {workspace.id === currentWorkspace?.id ? 'active' : ''}">
+            <div class="workspace-info">
+              <div class="workspace-name">
+                {#if editingWorkspaceId === workspace.id}
+                  <input 
+                    type="text" 
+                    bind:value={editingName}
+                    on:keydown={handleEditKeydown}
+                    on:blur={saveEdit}
+                    class="edit-input"
+                    placeholder="工作区名称"
+                    maxlength="50"
+                    autofocus
+                  />
+                {:else}
+                  <span class="name-text">{workspace.name}</span>
+                  <button 
+                    class="edit-button" 
+                    on:click={() => startEditWorkspace(workspace)}
+                    title="编辑名称"
+                  >
+                    ✏️
+                  </button>
+                {/if}
+                {#if workspace.id === currentWorkspace?.id}
+                  <span class="active-badge">当前</span>
+                {/if}
+              </div>
+              {#if workspace.description}
+                <div class="workspace-description">{workspace.description}</div>
+              {/if}
+              <div class="workspace-meta">
+                页签数量: {workspace.tabs?.length || 0} | 
+                创建时间: {new Date(workspace.createdAt).toLocaleDateString()}
+              </div>
             </div>
-        {/if}
+            <div class="workspace-actions">
+              {#if editingWorkspaceId === workspace.id}
+                <button class="save-edit-button" on:click={saveEdit}>保存</button>
+                <button class="cancel-edit-button" on:click={cancelEdit}>取消</button>
+              {:else}
+                {#if workspace.id !== currentWorkspace?.id}
+                  <button 
+                    class="switch-button" 
+                    on:click={() => switchWorkspace(workspace.id)}
+                  >
+                    切换
+                  </button>
+                {/if}
+                <button 
+                  class="delete-button" 
+                  on:click={() => deleteWorkspace(workspace)}
+                >
+                  删除
+                </button>
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
 
-        <div class="workspace-list">
-            <h4>所有工作区</h4>
-            {#if workspaces.length === 0}
-                <div class="empty-state">
-                    <p>暂无工作区</p>
-                    <button class="b3-button b3-button--primary" on:click={openCreateDialog}>
-                        创建第一个工作区
-                    </button>
-                </div>
-            {:else}
-                {#each workspaces as workspace}
-                    <div class="workspace-item" class:current={workspace.id === currentWorkspace?.id}>
-                        <div class="workspace-info">
-                            <div class="workspace-name">{workspace.name}</div>
-                            {#if workspace.description}
-                                <div class="workspace-description">{workspace.description}</div>
-                            {/if}
-                            <div class="workspace-meta">
-                                页签数: {workspace.tabs.length} | 
-                                创建于: {new Date(workspace.createdAt).toLocaleString()}
-                            </div>
-                        </div>
-                        <div class="workspace-actions">
-                            <button class="b3-button b3-button--text" on:click={() => switchToWorkspace(workspace)}>
-                                切换
-                            </button>
-                            <button class="b3-button b3-button--text" on:click={() => deleteWorkspace(workspace)}>
-                                删除
-                            </button>
-                        </div>
-                    </div>
-                {/each}
-            {/if}
-        </div>
+      <div class="actions">
+        <button class="create-button" on:click={openCreateDialog}>
+          + 新建工作区
+        </button>
+        <button class="save-button" on:click={saveCurrentWorkspace}>
+          保存当前工作区
+        </button>
+      </div>
     </div>
+  {/if}
+
+  <!-- 创建对话框 -->
+  {#if showCreateDialog}
+    <div class="dialog-overlay" on:click={closeCreateDialog}>
+      <div class="dialog" on:click|stopPropagation>
+        <div class="dialog-header">
+          <h3>新建工作区</h3>
+          <button class="close-button" on:click={closeCreateDialog}>×</button>
+        </div>
+        <div class="dialog-content">
+          <div class="form-group">
+            <label for="workspace-name">工作区名称 *</label>
+            <input 
+              id="workspace-name"
+              type="text" 
+              bind:value={createData.name}
+              placeholder="请输入工作区名称"
+              maxlength="50"
+            />
+          </div>
+          <div class="form-group">
+            <label for="workspace-description">描述</label>
+            <textarea 
+              id="workspace-description"
+              bind:value={createData.description}
+              placeholder="请输入工作区描述（可选）"
+              maxlength="200"
+              rows="3"
+            ></textarea>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="cancel-button" on:click={closeCreateDialog}>取消</button>
+          <button class="confirm-button" on:click={createWorkspace}>创建</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- 删除确认对话框 -->
+  {#if showDeleteDialog && workspaceToDelete}
+    <div class="dialog-overlay" on:click={() => showDeleteDialog = false}>
+      <div class="dialog" on:click|stopPropagation>
+        <div class="dialog-header">
+          <h3>确认删除</h3>
+        </div>
+        <div class="dialog-content">
+          <p>确定要删除工作区 "<strong>{workspaceToDelete.name}</strong>" 吗？</p>
+          <p class="warning-text">此操作不可撤销，工作区中的所有页签状态将丢失。</p>
+        </div>
+        <div class="dialog-footer">
+          <button class="cancel-button" on:click={() => showDeleteDialog = false}>取消</button>
+          <button class="delete-button" on:click={confirmDelete}>删除</button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
-<!-- 创建工作区对话框 -->
-{#if showCreateDialog}
-    <div class="b3-dialog__mask" on:click={closeCreateDialog}>
-        <div class="b3-dialog workspace-create-dialog" on:click|stopPropagation>
-            <div class="b3-dialog__header">
-                <div class="b3-dialog__header-title">
-                    <svg class="b3-dialog__header-icon"><use xlink:href="#iconAdd"></use></svg>
-                    <h3>新建工作区</h3>
-                </div>
-                <button class="b3-button b3-button--text b3-button--small" on:click={closeCreateDialog}>
-                    <svg class="b3-button__icon"><use xlink:href="#iconClose"></use></svg>
-                </button>
-            </div>
-            <div class="b3-dialog__body">
-                <div class="workspace-create-form">
-                    <div class="b3-form__item">
-                        <label class="b3-form__label" for="workspace-name">工作区名称 *</label>
-                        <input 
-                            id="workspace-name"
-                            class="b3-text-field b3-text-field--full" 
-                            type="text" 
-                            bind:value={createData.name}
-                            placeholder="请输入工作区名称"
-                            maxlength="50"
-                        />
-                        <div class="b3-form__help">为工作区起一个有意义的名字</div>
-                    </div>
-                    <div class="b3-form__item">
-                        <label class="b3-form__label" for="workspace-description">工作区描述</label>
-                        <textarea 
-                            id="workspace-description"
-                            class="b3-text-field b3-text-field--full" 
-                            bind:value={createData.description}
-                            placeholder="描述这个工作区的用途（可选）"
-                            rows="3"
-                            maxlength="200"
-                        ></textarea>
-                        <div class="b3-form__help">可选，用于描述工作区的用途</div>
-                    </div>
-                    <div class="workspace-create-info">
-                        <div class="workspace-create-info__icon">
-                            <svg><use xlink:href="#iconInfo"></use></svg>
-                        </div>
-                        <div class="workspace-create-info__text">
-                            <strong>提示：</strong>新建工作区将保存当前打开的所有页签状态，包括文档、搜索、图谱等。
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="b3-dialog__footer">
-                <button class="b3-button b3-button--text" on:click={closeCreateDialog}>取消</button>
-                <button class="b3-button b3-button--primary" on:click={createWorkspace} disabled={!createData.name.trim()}>
-                    <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
-                    创建工作区
-                </button>
-            </div>
-        </div>
-    </div>
-{/if}
-
-
 <style>
-    .workspace-panel {
-        padding: 16px;
-        height: 100%;
-        overflow-y: auto;
-    }
+  .workspace-panel {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
 
-    .workspace-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 16px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid var(--b3-border-color);
-    }
+  .simple-mode {
+    padding: 16px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+  }
 
-    .workspace-header h3 {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 600;
-    }
+  .full-management-mode {
+    padding: 16px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
 
-    .workspace-actions {
-        display: flex;
-        gap: 8px;
-    }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--b3-border-color);
+  }
 
-    .workspace-content {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-    }
+  .header h3 {
+    margin: 0;
+    color: var(--b3-theme-text);
+    font-size: 18px;
+    font-weight: 600;
+  }
 
-    .current-workspace h4,
-    .workspace-list h4 {
-        margin: 0 0 8px 0;
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--b3-theme-on-surface);
-    }
+  .back-button {
+    padding: 6px 12px;
+    background: var(--b3-theme-background);
+    border: 1px solid var(--b3-border-color);
+    border-radius: 4px;
+    color: var(--b3-theme-text);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+  }
 
+  .back-button:hover {
+    background: var(--b3-theme-hover);
+    border-color: var(--b3-theme-primary);
+  }
+
+  .workspace-list {
+    flex: 1;
+    overflow-y: auto;
+    margin-bottom: 16px;
+  }
+
+  .workspace-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: var(--b3-theme-background);
+    border: 1px solid var(--b3-border-color);
+    border-radius: 6px;
+    transition: all 0.2s ease;
+  }
+
+  .workspace-item:hover {
+    border-color: var(--b3-theme-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .workspace-item.active {
+    border-color: var(--b3-theme-primary);
+    background: var(--b3-theme-primary-light);
+  }
+
+  .workspace-info {
+    flex: 1;
+  }
+
+  .workspace-name {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--b3-theme-text);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+  }
+
+  .name-text {
+    flex: 1;
+  }
+
+  .edit-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 12px;
+    opacity: 0.6;
+    transition: all 0.2s ease;
+  }
+
+  .edit-button:hover {
+    opacity: 1;
+    background: var(--b3-theme-hover);
+  }
+
+  .edit-input {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid var(--b3-theme-primary);
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--b3-theme-text);
+    background: var(--b3-theme-background);
+    outline: none;
+  }
+
+  .edit-input:focus {
+    border-color: var(--b3-theme-primary);
+    box-shadow: 0 0 0 2px rgba(var(--b3-theme-primary-rgb), 0.2);
+  }
+
+  .active-badge {
+    background: var(--b3-theme-primary);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .workspace-description {
+    font-size: 14px;
+    color: var(--b3-theme-text-light);
+    margin-bottom: 4px;
+  }
+
+  .workspace-meta {
+    font-size: 12px;
+    color: var(--b3-theme-text-light);
+  }
+
+  .workspace-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .switch-button, .delete-button, .create-button, .save-button, .save-edit-button, .cancel-edit-button {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+  }
+
+  .save-edit-button {
+    background: var(--b3-theme-success);
+    color: white;
+  }
+
+  .save-edit-button:hover {
+    background: var(--b3-theme-success-dark);
+  }
+
+  .cancel-edit-button {
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-text);
+    border: 1px solid var(--b3-border-color);
+  }
+
+  .cancel-edit-button:hover {
+    background: var(--b3-theme-hover);
+  }
+
+  .switch-button {
+    background: var(--b3-theme-primary);
+    color: white;
+  }
+
+  .switch-button:hover {
+    background: var(--b3-theme-primary-dark);
+  }
+
+  .delete-button {
+    background: var(--b3-theme-error);
+    color: white;
+  }
+
+  .delete-button:hover {
+    background: var(--b3-theme-error-dark);
+  }
+
+  .actions {
+    display: flex;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid var(--b3-border-color);
+  }
+
+  .create-button {
+    background: var(--b3-theme-primary);
+    color: white;
+    padding: 10px 16px;
+    font-weight: 500;
+  }
+
+  .create-button:hover {
+    background: var(--b3-theme-primary-dark);
+  }
+
+  .save-button {
+    background: var(--b3-theme-success);
+    color: white;
+    padding: 10px 16px;
+  }
+
+  .save-button:hover {
+    background: var(--b3-theme-success-dark);
+  }
+
+  .dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  .dialog {
+    background: var(--b3-theme-background);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    min-width: 400px;
+    max-width: 500px;
+  }
+
+  .dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--b3-border-color);
+  }
+
+  .dialog-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--b3-theme-text);
+  }
+
+  .close-button {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: var(--b3-theme-text-light);
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .close-button:hover {
+    color: var(--b3-theme-text);
+  }
+
+  .dialog-content {
+    padding: 20px;
+  }
+
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: var(--b3-theme-text);
+  }
+
+  .form-group input,
+  .form-group textarea {
+    width: 100%;
+    max-width: 280px;
+    padding: 8px 12px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 4px;
+    font-size: 14px;
+    color: var(--b3-theme-text);
+    background: var(--b3-theme-background);
+    transition: border-color 0.2s ease;
+  }
+
+  .form-group input:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: var(--b3-theme-primary);
+  }
+
+  .dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--b3-border-color);
+  }
+
+  .cancel-button, .confirm-button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+  }
+
+  .cancel-button {
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-text);
+    border: 1px solid var(--b3-border-color);
+  }
+
+  .cancel-button:hover {
+    background: var(--b3-theme-hover);
+  }
+
+  .confirm-button {
+    background: var(--b3-theme-primary);
+    color: white;
+  }
+
+  .confirm-button:hover {
+    background: var(--b3-theme-primary-dark);
+  }
+
+  .warning-text {
+    color: var(--b3-theme-warning);
+    font-size: 14px;
+    margin-top: 8px;
+  }
+
+  /* 响应式设计 */
+  @media (max-width: 768px) {
+    .dialog {
+      min-width: 320px;
+      margin: 16px;
+    }
+    
     .workspace-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px;
-        border: 1px solid var(--b3-border-color);
-        border-radius: 6px;
-        margin-bottom: 8px;
-        cursor: pointer;
-        transition: all 0.2s;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
     }
-
-    .workspace-item:hover {
-        background-color: var(--b3-theme-surface-hover);
+    
+    .workspace-actions {
+      width: 100%;
+      justify-content: flex-end;
     }
-
-    .workspace-item.current {
-        border-color: var(--b3-theme-primary);
-        background-color: var(--b3-theme-primary-light);
-    }
-
-    .workspace-info {
-        flex: 1;
-    }
-
-    .workspace-name {
-        font-weight: 600;
-        margin-bottom: 4px;
-    }
-
-    .workspace-description {
-        color: var(--b3-theme-on-surface-variant);
-        font-size: 12px;
-        margin-bottom: 4px;
-    }
-
-    .workspace-meta {
-        color: var(--b3-theme-on-surface-variant);
-        font-size: 11px;
-    }
-
-    .empty-state {
-        text-align: center;
-        padding: 32px 16px;
-        color: var(--b3-theme-on-surface-variant);
-    }
-
-    .empty-state p {
-        margin: 0 0 16px 0;
-    }
-
-    .b3-dialog__mask {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-    }
-
-    .b3-dialog {
-        background-color: var(--b3-theme-surface);
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        min-width: 400px;
-        max-width: 500px;
-    }
-
-    .b3-dialog__header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 16px;
-        border-bottom: 1px solid var(--b3-border-color);
-    }
-
-    .b3-dialog__header h3 {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 600;
-    }
-
-    .b3-dialog__body {
-        padding: 16px;
-    }
-
-    .b3-dialog__footer {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-        padding: 16px;
-        border-top: 1px solid var(--b3-border-color);
-    }
-
-    .b3-form__item {
-        margin-bottom: 16px;
-    }
-
-    .b3-form__label {
-        display: block;
-        margin-bottom: 4px;
-        font-weight: 500;
-    }
-
-    .b3-text-field {
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid var(--b3-border-color);
-        border-radius: 4px;
-        background-color: var(--b3-theme-surface);
-        color: var(--b3-theme-on-surface);
-    }
-
-    .b3-text-field:focus {
-        outline: none;
-        border-color: var(--b3-theme-primary);
-    }
-
-    /* 新建工作区对话框样式 */
-    .workspace-create-dialog {
-        max-width: 500px;
-        width: 90vw;
-    }
-
-    .b3-dialog__header-title {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .b3-dialog__header-icon {
-        width: 20px;
-        height: 20px;
-        color: var(--b3-theme-primary);
-    }
-
-    .workspace-create-form {
-        padding: 8px 0;
-    }
-
-    .b3-form__help {
-        font-size: 12px;
-        color: var(--b3-theme-on-surface-variant);
-        margin-top: 4px;
-        line-height: 1.4;
-    }
-
-    .b3-text-field--full {
-        width: 100%;
-        box-sizing: border-box;
-    }
-
-    .workspace-create-info {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        padding: 12px;
-        background-color: var(--b3-theme-surface-variant);
-        border-radius: 6px;
-        margin-top: 16px;
-    }
-
-    .workspace-create-info__icon {
-        flex-shrink: 0;
-        margin-top: 2px;
-    }
-
-    .workspace-create-info__icon svg {
-        width: 16px;
-        height: 16px;
-        color: var(--b3-theme-primary);
-    }
-
-    .workspace-create-info__text {
-        flex: 1;
-        font-size: 13px;
-        line-height: 1.5;
-        color: var(--b3-theme-on-surface);
-    }
-
-    .workspace-create-info__text strong {
-        color: var(--b3-theme-primary);
-    }
-
-    .b3-button--small {
-        padding: 4px 8px;
-        font-size: 12px;
-    }
-
-    .b3-button:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
+  }
 </style>

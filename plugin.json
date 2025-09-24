@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "minAppVersion": "3.2.1",
   "disabledInPublish": false,
+  "icon": "icon.png",
   "backends": [
     "windows",
     "linux",
