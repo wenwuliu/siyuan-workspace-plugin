@@ -1,29 +1,19 @@
 {
   "name": "siyuan-workspace-plugin",
   "author": "liuwenwu",
-  "url": "https://github.com/liuwenwu/siyuan-workspace-plugin",
+  "url": "https://github.com/wenwuliu/siyuan-workspace-plugin",
   "version": "1.0.0",
-  "minAppVersion": "3.2.1",
+  "minAppVersion": "3.0.12",
   "disabledInPublish": false,
   "icon": "icon.png",
   "backends": [
-    "windows",
-    "linux",
-    "darwin",
-    "ios",
-    "android",
-    "harmony",
-    "docker"
+    "all"
   ],
   "frontends": [
-    "desktop",
-    "mobile",
-    "browser-desktop",
-    "browser-mobile",
-    "desktop-window"
+    "all"
   ],
   "displayName": {
-    "en_US": "Workspace Manager",
+    "default": "Workspace Manager",
     "zh_CN": "工作区管理器"
   },
   "description": {
@@ -31,7 +21,7 @@
     "zh_CN": "工作区管理插件，支持保存和切换不同的文档页签组合"
   },
   "readme": {
-    "en_US": "README.md",
+    "default": "README.md",
     "zh_CN": "README_zh_CN.md"
   },
   "funding": {
