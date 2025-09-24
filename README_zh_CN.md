@@ -103,7 +103,7 @@ MIT 许可证 - 详见 LICENSE 文件
 
 ## 支持
 
-如有问题或功能请求，请访问 [GitHub 仓库](https://github.com/liuwenwu/siyuan-workspace-plugin)。
+如有问题或功能请求，请访问 [GitHub 仓库](https://github.com/wenwuliu/siyuan-workspace-plugin)。
 
 ---
 

@@ -103,7 +103,7 @@ MIT License - see LICENSE file for details
 
 ## Support
 
-For issues and feature requests, please visit the [GitHub repository](https://github.com/liuwenwu/siyuan-workspace-plugin).
+For issues and feature requests, please visit the [GitHub repository](https://github.com/wenwuliu/siyuan-workspace-plugin).
 
 ---
 
